@@ -28,9 +28,4 @@
     <path
         android:pathData="M48,43.5 L66.5,54 L48,64.5 Z"
         android:fillColor="#FFFFFF" />
-
-    <!-- orbit dot -->
-    <path
-        android:pathData="M54,15 A3,3 0 1,1 53.999,15 Z"
-        android:fillColor="#22D3EE" />
 </vector>

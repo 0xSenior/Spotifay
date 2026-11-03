@@ -51,12 +51,6 @@ fun BrandMark(
                 close()
             }
             drawPath(triangle, color = androidx.compose.ui.graphics.Color.White)
-
-            drawCircle(
-                color = androidx.compose.ui.graphics.Color(0xFF22D3EE),
-                radius = d * 0.032f,
-                center = Offset(center.x, center.y - 0.365f * d),
-            )
         }
     }
 }
