@@ -1,4 +1,4 @@
-﻿package com.example.spotifay.ui.screens
+package com.example.spotifay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,7 +24,6 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,8 +40,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.spotifay.Graph
 import com.example.spotifay.data.audius.AudiusTrack
+import com.example.spotifay.playback.PlayerHub
 import com.example.spotifay.ui.components.CoverArt
+import com.example.spotifay.ui.components.LoadingBar
+import com.example.spotifay.ui.components.LoadingCrossfade
 import com.example.spotifay.ui.components.SectionHeader
+import com.example.spotifay.ui.components.ShimmerHost
+import com.example.spotifay.ui.components.SkeletonBox
+import com.example.spotifay.ui.components.SkeletonPlaylistCarousel
+import com.example.spotifay.ui.components.SkeletonTrackRow
 import com.example.spotifay.ui.components.SpotifayWordmark
 import com.example.spotifay.ui.home.HomeUiState
 import com.example.spotifay.ui.home.HomeViewModel
@@ -55,29 +62,103 @@ fun HomeScreen(
 ) {
     val viewModel: HomeViewModel = viewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
+    val preparing by PlayerHub.preparing.collectAsStateWithLifecycle()
 
+    LoadingCrossfade(
+        loading = state is HomeUiState.Loading,
+        modifier = Modifier.fillMaxSize(),
+        skeleton = { HomeSkeleton(onReload = { viewModel.load(force = true) }) },
+        content = {
+            HomeContent(
+                state = state,
+                preparing = preparing,
+                onPlay = onPlay,
+                onReload = { viewModel.load(force = true) },
+            )
+        },
+    )
+}
+
+/** Placeholders that trace the real Home layout while the catalogue loads. */
+@Composable
+private fun HomeSkeleton(onReload: () -> Unit) {
     LazyColumn(
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        item { HomeHeader(onReload) }
+
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SpotifayWordmark(Modifier.weight(1f))
-                IconButton(onClick = { viewModel.load(force = true) }) {
-                    Icon(
-                        Icons.Rounded.Refresh,
-                        contentDescription = "Reload",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(
+                text = "Listen now",
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
+
+        item {
+            ShimmerHost {
+                Column(Modifier.fillMaxWidth()) {
+                    SkeletonBox(
+                        Modifier
+                            .padding(start = 20.dp, top = 10.dp, bottom = 12.dp)
+                            .width(168.dp)
+                            .height(20.dp),
+                        RoundedCornerShape(7.dp),
                     )
+                    SkeletonPlaylistCarousel()
+                    SkeletonBox(
+                        Modifier
+                            .padding(start = 20.dp, top = 22.dp, bottom = 10.dp)
+                            .width(146.dp)
+                            .height(20.dp),
+                        RoundedCornerShape(7.dp),
+                    )
+                    repeat(7) { SkeletonTrackRow() }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HomeHeader(onReload: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SpotifayWordmark(Modifier.weight(1f))
+        IconButton(onClick = onReload) {
+            Icon(
+                Icons.Rounded.Refresh,
+                contentDescription = "Reload",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeContent(
+    state: HomeUiState,
+    preparing: Boolean,
+    onPlay: (List<AudiusTrack>, Int) -> Unit,
+    onReload: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        item { HomeHeader(onReload) }
+
+        item { LoadingBar(visible = preparing, modifier = Modifier.padding(horizontal = 20.dp)) }
 
         item {
             Text(
@@ -89,14 +170,8 @@ fun HomeScreen(
         }
 
         when (val current = state) {
-            HomeUiState.Loading -> item {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 56.dp),
-                    contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator(color = Violet, strokeWidth = 2.dp) }
-            }
+            // Never visible: the skeleton layer owns this state (see HomeSkeleton).
+            HomeUiState.Loading -> Unit
 
             is HomeUiState.Failed -> item {
                 Column(
@@ -120,7 +195,7 @@ fun HomeScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { viewModel.load(force = true) },
+                        onClick = onReload,
                         shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -145,11 +220,17 @@ fun HomeScreen(
                                     Modifier
                                         .width(148.dp)
                                         .clickable {
+                                            if (PlayerHub.preparing.value) return@clickable
+                                            PlayerHub.setPreparing(true)
                                             scope.launch {
-                                                val tracks = runCatching {
-                                                    Graph.repository.playlistTracks(playlist.id)
-                                                }.getOrDefault(emptyList())
-                                                if (tracks.isNotEmpty()) onPlay(tracks, 0)
+                                                try {
+                                                    val tracks = runCatching {
+                                                        Graph.repository.playlistTracks(playlist.id)
+                                                    }.getOrDefault(emptyList())
+                                                    if (tracks.isNotEmpty()) onPlay(tracks, 0)
+                                                } finally {
+                                                    PlayerHub.setPreparing(false)
+                                                }
                                             }
                                         },
                                 ) {
@@ -186,7 +267,7 @@ fun HomeScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
-                                        "${playlist.track_count} tracks Â· ${playlist.user.name}",
+                                        "${playlist.track_count} tracks · ${playlist.user.name}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -245,7 +326,7 @@ private fun TrackCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${track.user.name} Â· ${track.playsLabel} plays",
+                "${track.user.name} · ${track.playsLabel} plays",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

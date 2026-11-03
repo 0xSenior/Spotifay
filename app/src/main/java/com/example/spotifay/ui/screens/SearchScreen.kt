@@ -1,4 +1,4 @@
-﻿package com.example.spotifay.ui.screens
+package com.example.spotifay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +48,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.spotifay.Graph
 import com.example.spotifay.data.audius.AudiusTrack
+import com.example.spotifay.playback.PlayerHub
 import com.example.spotifay.ui.components.CoverArt
+import com.example.spotifay.ui.components.LoadingBar
+import com.example.spotifay.ui.components.LoadingCrossfade
+import com.example.spotifay.ui.components.ShimmerHost
+import com.example.spotifay.ui.components.SkeletonBox
+import com.example.spotifay.ui.components.SkeletonPlaylistCarousel
+import com.example.spotifay.ui.components.SkeletonTrackRow
 import com.example.spotifay.ui.search.SearchUiState
 import com.example.spotifay.ui.search.SearchViewModel
 import com.example.spotifay.ui.theme.Violet
@@ -67,7 +73,7 @@ fun SearchScreen(
 ) {
     val viewModel: SearchViewModel = viewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
+    val preparing by PlayerHub.preparing.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
@@ -116,123 +122,157 @@ fun SearchScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        when (val current = state) {
-            SearchUiState.Idle -> BrowseAll(onGenreClick = { genre ->
+        LoadingBar(
+            visible = preparing || (state as? SearchUiState.Results)?.isRefreshing == true,
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
+
+        SearchResults(
+            state = state,
+            query = text,
+            onGenreClick = { genre ->
                 text = genre
                 viewModel.onQueryChange(genre)
-            })
+            },
+            onPlay = onPlay,
+        )
+    }
+}
 
-            SearchUiState.Loading -> Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 40.dp),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator(color = Violet, strokeWidth = 2.dp) }
+/**
+ * Results area. Skeletons fade into results, and an in-flight query keeps the
+ * previous results on screen so typing never blanks the page.
+ */
+@Composable
+private fun SearchResults(
+    state: SearchUiState,
+    query: String,
+    onGenreClick: (String) -> Unit,
+    onPlay: (List<AudiusTrack>, Int) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
 
-            is SearchUiState.Failed -> Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-            ) {
-                Text(current.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            }
+    LoadingCrossfade(
+        loading = state is SearchUiState.Loading,
+        modifier = Modifier.fillMaxSize(),
+        skeleton = { SearchSkeleton() },
+        content = {
+            when (val current = state) {
+                SearchUiState.Idle -> BrowseAll(onGenreClick = onGenreClick)
 
-            is SearchUiState.Results -> {
-                if (current.isEmpty) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                    ) {
-                        Text(
-                            "Nothing found for \"$text\"",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                } else {
-                    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                        if (current.playlists.isNotEmpty()) {
-                            item {
-                                Text(
-                                    "Playlists",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 8.dp),
-                                )
+                SearchUiState.Loading -> SearchSkeleton()
+
+                is SearchUiState.Failed -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                ) {
+                    Text(current.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                is SearchUiState.Results -> {
+                    if (current.isEmpty) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                        ) {
+                            Text(
+                                "Nothing found for \"$query\"",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    } else {
+                        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                            if (current.playlists.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "Playlists",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 8.dp),
+                                    )
+                                }
+                                item {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 20.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        items(current.playlists, key = { it.id }) { playlist ->
+                                            Column(
+                                                Modifier
+                                                    .width(132.dp)
+                                                    .clickable {
+                                                        if (PlayerHub.preparing.value) return@clickable
+                                                        PlayerHub.setPreparing(true)
+                                                        scope.launch {
+                                                            try {
+                                                                val tracks = runCatching {
+                                                                    Graph.repository.playlistTracks(playlist.id)
+                                                                }.getOrDefault(emptyList())
+                                                                if (tracks.isNotEmpty()) onPlay(tracks, 0)
+                                                            } finally {
+                                                                PlayerHub.setPreparing(false)
+                                                            }
+                                                        }
+                                                    },
+                                            ) {
+                                                CoverArt(playlist.thumbUrl, playlist.playlist_name.hashCode(), 132.dp, corner = 14.dp)
+                                                Spacer(Modifier.height(8.dp))
+                                                Text(
+                                                    playlist.playlist_name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.onBackground,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Text(
+                                                    "${playlist.track_count} tracks",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            item {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 20.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    items(current.playlists, key = { it.id }) { playlist ->
-                                        Column(
-                                            Modifier
-                                                .width(132.dp)
-                                                .clickable {
-                                                    scope.launch {
-                                                        val tracks = runCatching {
-                                                            Graph.repository.playlistTracks(playlist.id)
-                                                        }.getOrDefault(emptyList())
-                                                        if (tracks.isNotEmpty()) onPlay(tracks, 0)
-                                                    }
-                                                },
-                                        ) {
-                                            CoverArt(playlist.thumbUrl, playlist.playlist_name.hashCode(), 132.dp, corner = 14.dp)
-                                            Spacer(Modifier.height(8.dp))
+
+                            if (current.tracks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "Songs",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 8.dp),
+                                    )
+                                }
+                                itemsIndexed(current.tracks, key = { _, track -> track.id }) { index, track ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onPlay(current.tracks, index) }
+                                            .padding(horizontal = 20.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        CoverArt(track.thumbUrl, track.id.hashCode(), 52.dp)
+                                        Spacer(Modifier.width(13.dp))
+                                        Column(Modifier.weight(1f)) {
                                             Text(
-                                                playlist.playlist_name,
+                                                track.title,
                                                 style = MaterialTheme.typography.titleMedium,
                                                 color = MaterialTheme.colorScheme.onBackground,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                             )
                                             Text(
-                                                "${playlist.track_count} tracks",
+                                                "${track.user.name} · ${track.playsLabel} plays",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (current.tracks.isNotEmpty()) {
-                            item {
-                                Text(
-                                    "Songs",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 8.dp),
-                                )
-                            }
-                            itemsIndexed(current.tracks, key = { _, track -> track.id }) { index, track ->
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onPlay(current.tracks, index) }
-                                        .padding(horizontal = 20.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    CoverArt(track.thumbUrl, track.id.hashCode(), 52.dp)
-                                    Spacer(Modifier.width(13.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            track.title,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = MaterialTheme.colorScheme.onBackground,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        Text(
-                                            "${track.user.name} Â· ${track.playsLabel} plays",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
                                     }
                                 }
                             }
@@ -240,6 +280,31 @@ fun SearchScreen(
                     }
                 }
             }
+        },
+    )
+}
+
+/** Same shape as the results page: heading, playlist carousel, song rows. */
+@Composable
+private fun SearchSkeleton() {
+    ShimmerHost {
+        Column(Modifier.fillMaxWidth()) {
+            SkeletonBox(
+                Modifier
+                    .padding(start = 20.dp, top = 6.dp, bottom = 12.dp)
+                    .width(120.dp)
+                    .height(20.dp),
+                RoundedCornerShape(7.dp),
+            )
+            SkeletonPlaylistCarousel(count = 3, cardSize = 132.dp)
+            SkeletonBox(
+                Modifier
+                    .padding(start = 20.dp, top = 22.dp, bottom = 10.dp)
+                    .width(96.dp)
+                    .height(20.dp),
+                RoundedCornerShape(7.dp),
+            )
+            repeat(6) { SkeletonTrackRow() }
         }
     }
 }

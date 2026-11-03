@@ -20,6 +20,7 @@ sealed interface SearchUiState {
     data class Results(
         val tracks: List<AudiusTrack> = emptyList(),
         val playlists: List<AudiusPlaylist> = emptyList(),
+        val isRefreshing: Boolean = false,
     ) : SearchUiState {
         val isEmpty: Boolean get() = tracks.isEmpty() && playlists.isEmpty()
     }
@@ -35,6 +36,9 @@ class SearchViewModel : ViewModel() {
     private val _state = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val state = _state.asStateFlow()
 
+    /** Last successful results, kept on screen while the next query loads. */
+    private var lastResults: SearchUiState.Results? = null
+
     init {
         viewModelScope.launch {
             query
@@ -43,16 +47,20 @@ class SearchViewModel : ViewModel() {
                 .collectLatest { raw ->
                     val text = raw.trim()
                     if (text.isEmpty()) {
+                        lastResults = null
                         _state.value = SearchUiState.Idle
                         return@collectLatest
                     }
-                    _state.value = SearchUiState.Loading
+                    _state.value = lastResults?.copy(isRefreshing = true) ?: SearchUiState.Loading
                     runCatching {
                         val tracks = Graph.repository.searchTracks(text)
                         val playlists = runCatching { Graph.repository.searchPlaylists(text) }.getOrDefault(emptyList())
                         SearchUiState.Results(tracks = tracks, playlists = playlists)
                     }
-                        .onSuccess { _state.value = it }
+                        .onSuccess {
+                            lastResults = it
+                            _state.value = it
+                        }
                         .onFailure { _state.value = SearchUiState.Failed(it.readable()) }
                 }
         }
