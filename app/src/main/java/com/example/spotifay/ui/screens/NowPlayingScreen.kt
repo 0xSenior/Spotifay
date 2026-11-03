@@ -3,16 +3,14 @@ package com.example.spotifay.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -29,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.example.spotifay.playback.NowPlayingState
 import com.example.spotifay.playback.PlayerHub
 import com.example.spotifay.ui.theme.BrandBrush
 import com.example.spotifay.ui.theme.OnAccent
@@ -83,32 +81,41 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             Spacer(Modifier.size(48.dp))
         }
 
-        Spacer(Modifier.size(28.dp))
+        Spacer(Modifier.size(12.dp))
 
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    if (state.artwork.isNullOrBlank()) {
-                        artworkBrush(state.title.hashCode())
-                    } else {
-                        BrandBrush
-                    },
-                ),
+        // Take whatever vertical space the text and controls don't need, then
+        // draw the largest square that fits inside it.
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
         ) {
-            if (!state.artwork.isNullOrBlank()) {
-                AsyncImage(
-                    model = state.artwork,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
-                )
+            val artSize = minOf(maxWidth, maxHeight)
+            Box(
+                Modifier
+                    .size(artSize)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        if (state.artwork.isNullOrBlank()) {
+                            artworkBrush(state.title.hashCode())
+                        } else {
+                            BrandBrush
+                        },
+                    ),
+            ) {
+                if (!state.artwork.isNullOrBlank()) {
+                    AsyncImage(
+                        model = state.artwork,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.size(28.dp))
+        Spacer(Modifier.size(18.dp))
 
         Text(
             text = state.title.ifBlank { "Nothing playing" },
@@ -118,7 +125,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.size(6.dp))
+        Spacer(Modifier.size(4.dp))
         Text(
             text = state.artist.ifBlank { "Pick a track from Listen now" },
             style = MaterialTheme.typography.bodyLarge,
@@ -127,7 +134,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
 
-        Spacer(Modifier.size(20.dp))
+        Spacer(Modifier.size(10.dp))
 
         Slider(
             value = sliderValue,
@@ -154,7 +161,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             Text(state.durationLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        Spacer(Modifier.size(22.dp))
+        Spacer(Modifier.size(12.dp))
 
         Row(
             Modifier.fillMaxWidth(),
@@ -197,22 +204,31 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             }
         }
 
-        if (state.isBuffering) {
-            Spacer(Modifier.size(10.dp))
-            Text(
-                "Buffering…",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        StatusLine(state)
 
-        if (state.error != null) {
-            Spacer(Modifier.size(10.dp))
+        Spacer(Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun StatusLine(state: NowPlayingState) {
+    when {
+        state.error != null -> {
+            Spacer(Modifier.size(8.dp))
             Text(
-                state.error ?: "",
+                state.error.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center,
+            )
+        }
+
+        state.isBuffering -> {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                "Buffering...",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
