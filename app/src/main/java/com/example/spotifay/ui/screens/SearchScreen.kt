@@ -1,4 +1,4 @@
-package com.example.spotifay.ui.screens
+﻿package com.example.spotifay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -166,7 +166,7 @@ fun SearchScreen(
                                     contentPadding = PaddingValues(horizontal = 20.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    items(current.playlists) { playlist ->
+                                    items(current.playlists, key = { it.id }) { playlist ->
                                         Column(
                                             Modifier
                                                 .width(132.dp)
@@ -179,7 +179,7 @@ fun SearchScreen(
                                                     }
                                                 },
                                         ) {
-                                            CoverArt(playlist.coverUrl, playlist.playlist_name.hashCode(), 132.dp, corner = 14.dp)
+                                            CoverArt(playlist.thumbUrl, playlist.playlist_name.hashCode(), 132.dp, corner = 14.dp)
                                             Spacer(Modifier.height(8.dp))
                                             Text(
                                                 playlist.playlist_name,
@@ -208,7 +208,7 @@ fun SearchScreen(
                                     modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 8.dp),
                                 )
                             }
-                            itemsIndexed(current.tracks) { index, track ->
+                            itemsIndexed(current.tracks, key = { _, track -> track.id }) { index, track ->
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
@@ -216,7 +216,7 @@ fun SearchScreen(
                                         .padding(horizontal = 20.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    CoverArt(track.coverUrl, track.id.hashCode(), 52.dp)
+                                    CoverArt(track.thumbUrl, track.id.hashCode(), 52.dp)
                                     Spacer(Modifier.width(13.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(
@@ -227,7 +227,7 @@ fun SearchScreen(
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                         Text(
-                                            "${track.user.name} · ${track.playsLabel} plays",
+                                            "${track.user.name} Â· ${track.playsLabel} plays",
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,

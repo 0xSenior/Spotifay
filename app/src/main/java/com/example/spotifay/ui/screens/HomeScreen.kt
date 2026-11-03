@@ -1,4 +1,4 @@
-package com.example.spotifay.ui.screens
+﻿package com.example.spotifay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -140,7 +140,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            items(current.playlists) { playlist ->
+                            items(current.playlists, key = { it.id }) { playlist ->
                                 Column(
                                     Modifier
                                         .width(148.dp)
@@ -155,7 +155,7 @@ fun HomeScreen(
                                 ) {
                                     Box {
                                         CoverArt(
-                                            url = playlist.coverUrl,
+                                            url = playlist.thumbUrl,
                                             seed = playlist.playlist_name.hashCode(),
                                             size = 148.dp,
                                             corner = 14.dp,
@@ -186,7 +186,7 @@ fun HomeScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
-                                        "${playlist.track_count} tracks · ${playlist.user.name}",
+                                        "${playlist.track_count} tracks Â· ${playlist.user.name}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -203,7 +203,7 @@ fun HomeScreen(
                     SectionHeader("Trending tracks", action = "This week")
                 }
 
-                itemsIndexed(current.tracks) { index, track ->
+                itemsIndexed(current.tracks, key = { _, track -> track.id }) { index, track ->
                     TrackCard(
                         index = index + 1,
                         track = track,
@@ -234,7 +234,7 @@ private fun TrackCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(24.dp),
         )
-        CoverArt(url = track.coverUrl, seed = track.id.hashCode(), size = 52.dp)
+        CoverArt(url = track.thumbUrl, seed = track.id.hashCode(), size = 52.dp)
         Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -245,7 +245,7 @@ private fun TrackCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${track.user.name} · ${track.playsLabel} plays",
+                "${track.user.name} Â· ${track.playsLabel} plays",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

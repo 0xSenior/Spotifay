@@ -1,4 +1,4 @@
-package com.example.spotifay.ui.screens
+﻿package com.example.spotifay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,7 +78,7 @@ fun LibraryScreen(
 
         if (recent.isNotEmpty()) {
             item { SectionHeader("Recently played") }
-            itemsIndexed(recent) { index, track ->
+            itemsIndexed(recent, key = { _, track -> track.id }) { index, track ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -86,7 +86,7 @@ fun LibraryScreen(
                         .padding(horizontal = 20.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CoverArt(url = track.coverUrl, seed = track.id.hashCode(), size = 52.dp)
+                    CoverArt(url = track.thumbUrl, seed = track.id.hashCode(), size = 52.dp)
                     Spacer(Modifier.width(13.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -97,7 +97,7 @@ fun LibraryScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            "${track.user.name} · ${track.durationLabel}",
+                            "${track.user.name} Â· ${track.durationLabel}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -130,7 +130,7 @@ fun LibraryScreen(
                     )
                 }
             } else {
-                items(loaded) { playlist ->
+                items(loaded, key = { it.id }) { playlist ->
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -147,7 +147,7 @@ fun LibraryScreen(
                     ) {
                         Box {
                             CoverArt(
-                                url = playlist.coverUrl,
+                                url = playlist.thumbUrl,
                                 seed = playlist.playlist_name.hashCode(),
                                 size = 56.dp,
                                 corner = 12.dp,
@@ -179,7 +179,7 @@ fun LibraryScreen(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                "${playlist.track_count} tracks · ${playlist.user.name}",
+                                "${playlist.track_count} tracks Â· ${playlist.user.name}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,

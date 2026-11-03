@@ -71,7 +71,8 @@ fun SpotifayApp() {
     val currentRoute = backStackEntry?.destination?.route
     val showChrome = currentRoute != NowPlayingRoute
 
-    val playerState by PlayerHub.state.collectAsStateWithLifecycle()
+    // Only track identity here: the position tick stays inside Now Playing.
+    val playerState by PlayerHub.trackState.collectAsStateWithLifecycle()
 
     val openNowPlaying: () -> Unit = {
         navController.navigate(NowPlayingRoute) { launchSingleTop = true }

@@ -75,6 +75,7 @@ class MusicRepository(private val api: AudiusApi) {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     private suspend fun <T : Any> cached(
         key: String,
         ttlMs: Long,

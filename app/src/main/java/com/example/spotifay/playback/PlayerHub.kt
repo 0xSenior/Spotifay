@@ -19,6 +19,10 @@ object PlayerHub {
     val state: StateFlow<NowPlayingState>
         get() = requireNotNull(connection) { "PlayerHub.init() was never called" }.state
 
+    /** Track identity only, no playhead — cheap for the app chrome to observe. */
+    val trackState: StateFlow<NowPlayingState>
+        get() = requireNotNull(connection) { "PlayerHub.init() was never called" }.trackState
+
     val recent: StateFlow<List<AudiusTrack>>
         get() = requireNotNull(connection) { "PlayerHub.init() was never called" }.recent
 

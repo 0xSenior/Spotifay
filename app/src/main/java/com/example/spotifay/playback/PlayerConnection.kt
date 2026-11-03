@@ -9,6 +9,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.example.spotifay.Graph
 import com.example.spotifay.data.audius.AudiusTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,9 +17,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import java.io.File
 import java.util.concurrent.Executor
 
 /** Give up after this many consecutive bad tracks so we never spin forever. */
@@ -70,9 +78,21 @@ class PlayerConnection(context: Context) {
     private val _state = MutableStateFlow(NowPlayingState())
     val state: StateFlow<NowPlayingState> = _state.asStateFlow()
 
-    /** Session history, newest first. Lives as long as the process does. */
+    /**
+     * Everything except the moving playhead. The tab bar and mini player watch
+     * this, so the twice-a-second position tick never recomposes the whole app.
+     */
+    val trackState: StateFlow<NowPlayingState> = _state
+        .map { it.copy(positionMs = 0L) }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, NowPlayingState())
+
+    /** Session history, newest first. Persisted so it survives a restart. */
     private val _recent = MutableStateFlow<List<AudiusTrack>>(emptyList())
     val recent: StateFlow<List<AudiusTrack>> = _recent.asStateFlow()
+
+    private val recentFile = File(appContext.filesDir, "recent-tracks.json")
+    private var saveJob: Job? = null
 
     private val queuedTracks = mutableMapOf<String, AudiusTrack>()
     private var lastRememberedId: String? = null
@@ -84,7 +104,23 @@ class PlayerConnection(context: Context) {
     private var transientErrorAt = 0L
 
     init {
+        restoreRecent()
         connect()
+    }
+
+    private fun restoreRecent() {
+        scope.launch(Dispatchers.IO) {
+            val saved = runCatching {
+                val text = recentFile.takeIf { it.exists() }?.readText().orEmpty()
+                Graph.json.decodeFromString<List<AudiusTrack>>(text)
+            }.getOrDefault(emptyList())
+
+            if (saved.isNotEmpty() && _recent.value.isEmpty()) {
+                val playable = saved.filter { it.isPlayable }.take(30)
+                _recent.value = playable
+                lastRememberedId = playable.firstOrNull()?.id
+            }
+        }
     }
 
     private fun connect() {
@@ -198,6 +234,24 @@ class PlayerConnection(context: Context) {
     private fun remember(track: AudiusTrack) {
         _recent.value = (listOf(track) + _recent.value.filterNot { it.id == track.id }).take(30)
         lastRememberedId = track.id
+        persistRecent()
+    }
+
+    /** Writes off the main thread; the newest write always wins. */
+    private fun persistRecent() {
+        val snapshot = _recent.value
+        saveJob?.cancel()
+        saveJob = scope.launch(Dispatchers.IO) {
+            runCatching {
+                val text = Graph.json.encodeToString(snapshot)
+                val temp = File(recentFile.parentFile, "${recentFile.name}.tmp")
+                temp.writeText(text)
+                if (!temp.renameTo(recentFile)) {
+                    recentFile.writeText(text)
+                    temp.delete()
+                }
+            }
+        }
     }
 
     private fun rememberCurrent() {
