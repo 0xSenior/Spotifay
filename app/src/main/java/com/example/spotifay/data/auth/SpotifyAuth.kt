@@ -87,7 +87,7 @@ class SpotifyAuth(context: Context) {
                 onResult(tokenError ?: IllegalStateException("Token exchange failed"))
                 return@performTokenRequest
             }
-            persist(AuthState(response, tokenResponse))
+            persist(AuthState(response, tokenResponse, null))
             onResult(null)
         }
     }
@@ -99,7 +99,8 @@ class SpotifyAuth(context: Context) {
         if (token != null && !current.needsTokenRefresh) return token
 
         val latch = CountDownLatch(1)
-        @Volatile var refreshed: String? = null
+        // Written on AppAuth's callback thread; the latch below publishes it safely.
+        var refreshed: String? = null
 
         current.performActionWithFreshTokens(service) { accessToken, _, exception ->
             if (exception == null && accessToken != null) {
@@ -114,7 +115,8 @@ class SpotifyAuth(context: Context) {
     }
 
     fun signOut() {
-        _state.value?.let { service.performRevokeAccess(it, null) }
+        // AppAuth 0.11 no longer exposes a revoke helper; Spotify access tokens are
+        // short-lived, so dropping the local session is enough to end it here.
         prefs.edit().remove(KEY_STATE).apply()
         _state.value = null
     }

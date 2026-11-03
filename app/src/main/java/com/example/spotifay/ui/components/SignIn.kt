@@ -36,15 +36,13 @@ fun rememberSpotifySignIn(): SpotifySignIn {
         }
     }
 
-    return remember(launcher) {
-        SpotifySignIn(
-            onSignIn = {
-                error = null
-                runCatching { launcher.launch(Graph.auth.loginIntent()) }
-                    .onFailure { error = it.message ?: "Could not open Spotify sign-in" }
-            },
-            error = error,
-            dismissError = { error = null },
-        )
-    }
+    return SpotifySignIn(
+        onSignIn = {
+            error = null
+            runCatching { launcher.launch(Graph.auth.loginIntent()) }
+                .onFailure { error = it.message ?: "Could not open Spotify sign-in" }
+        },
+        error = error,
+        dismissError = { error = null },
+    )
 }

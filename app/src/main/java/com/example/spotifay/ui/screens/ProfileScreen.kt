@@ -18,21 +18,34 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.example.spotifay.ui.components.BrandMark
+import com.example.spotifay.ui.components.rememberSpotifySignIn
+import com.example.spotifay.ui.profile.ProfileUiState
+import com.example.spotifay.ui.profile.ProfileViewModel
 import com.example.spotifay.ui.theme.BrandBrush
+import com.example.spotifay.ui.theme.OnAccent
+import com.example.spotifay.ui.theme.Violet
 
 private data class SettingsEntry(val icon: ImageVector, val title: String, val subtitle: String)
 
@@ -46,6 +59,10 @@ private val settingsEntries = listOf(
 
 @Composable
 fun ProfileScreen() {
+    val viewModel: ProfileViewModel = viewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val signIn = rememberSpotifySignIn()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -57,39 +74,133 @@ fun ProfileScreen() {
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(
-                    Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(BrandBrush),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    BrandMark(size = 48.dp)
+                when (val current = state) {
+                    is ProfileUiState.Ready -> {
+                        Box(
+                            Modifier
+                                .size(88.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(BrandBrush),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (current.user.avatarUrl != null) {
+                                AsyncImage(
+                                    model = current.user.avatarUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            } else {
+                                BrandMark(size = 48.dp)
+                            }
+                        }
+                        Spacer(Modifier.size(14.dp))
+                        Text(
+                            current.user.display_name ?: current.user.id,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            current.user.email ?: current.user.id,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!current.user.product.isNullOrBlank()) {
+                            Spacer(Modifier.size(8.dp))
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Violet.copy(alpha = 0.18f))
+                                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    current.user.product!!.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Violet,
+                                )
+                            }
+                        }
+                    }
+
+                    ProfileUiState.Loading -> Box(
+                        Modifier.size(88.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator(color = Violet, strokeWidth = 2.dp) }
+
+                    ProfileUiState.SignedOut -> {
+                        Box(
+                            Modifier
+                                .size(88.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(BrandBrush),
+                            contentAlignment = Alignment.Center,
+                        ) { BrandMark(size = 48.dp) }
+                        Spacer(Modifier.size(14.dp))
+                        Text(
+                            "Guest",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            "Not signed in",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    is ProfileUiState.Failed -> {
+                        Text(
+                            "Couldn't load profile",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            current.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
-                Spacer(Modifier.size(14.dp))
-                Text(
-                    "Guest",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Text(
-                    "Not signed in",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
 
-        item {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                StatCard("0", "Playlists", Modifier.weight(1f))
-                StatCard("0", "Following", Modifier.weight(1f))
-                StatCard("0", "Liked", Modifier.weight(1f))
+        if (state is ProfileUiState.SignedOut || state is ProfileUiState.Failed) {
+            item {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Button(
+                        onClick = signIn.onSignIn,
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(containerColor = Violet, contentColor = OnAccent),
+                    ) { Text("Sign in with Spotify") }
+                    if (signIn.error != null) {
+                        Spacer(Modifier.size(8.dp))
+                        Text(signIn.error ?: "", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+
+        if (state is ProfileUiState.Ready) {
+            item {
+                Spacer(Modifier.size(6.dp))
+                Button(
+                    onClick = { viewModel.signOut() },
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                ) {
+                    Icon(Icons.Rounded.ExitToApp, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("Sign out")
+                }
             }
         }
 
@@ -98,7 +209,7 @@ fun ProfileScreen() {
                 text = "Settings",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(start = 20.dp, top = 18.dp, bottom = 4.dp),
+                modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp),
             )
         }
 
@@ -108,6 +219,7 @@ fun ProfileScreen() {
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
             ) {
                 Box(
                     Modifier
@@ -144,27 +256,5 @@ fun ProfileScreen() {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            value,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }

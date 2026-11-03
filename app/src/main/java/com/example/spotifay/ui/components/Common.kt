@@ -60,6 +60,7 @@ fun ArtworkTile(
     size: Dp = 148.dp,
     title: String? = null,
     subtitle: String? = null,
+    url: String? = null,
     modifier: Modifier = Modifier,
     brush: Brush = artworkBrush(seed),
 ) {
@@ -69,7 +70,16 @@ fun ArtworkTile(
                 .size(size)
                 .clip(RoundedCornerShape(14.dp))
                 .background(brush),
-        )
+        ) {
+            if (!url.isNullOrBlank()) {
+                coil3.compose.AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+        }
         if (title != null) {
             Spacer(Modifier.height(10.dp))
             Text(
