@@ -14,10 +14,10 @@ class MusicRepository(private val api: AudiusApi) {
     private val appName = AudiusConfig.APP_NAME
 
     suspend fun trendingTracks(limit: Int = 40): List<AudiusTrack> =
-        api.trendingTracks(appName, limit, "week").data.orEmpty()
+        api.trendingTracks(appName, limit, "week").data.orEmpty().filter { it.isPlayable }
 
     suspend fun searchTracks(query: String, limit: Int = 25): List<AudiusTrack> =
-        api.searchTracks(query, appName, limit).data.orEmpty()
+        api.searchTracks(query, appName, limit).data.orEmpty().filter { it.isPlayable }
 
     suspend fun trendingPlaylists(limit: Int = 20): List<AudiusPlaylist> =
         api.trendingPlaylists(appName, limit).data.orEmpty()
@@ -26,5 +26,5 @@ class MusicRepository(private val api: AudiusApi) {
         api.searchPlaylists(query, appName, limit).data.orEmpty()
 
     suspend fun playlistTracks(playlistId: String): List<AudiusTrack> =
-        api.playlistTracks(playlistId, appName).data.orEmpty()
+        api.playlistTracks(playlistId, appName).data.orEmpty().filter { it.isPlayable }
 }

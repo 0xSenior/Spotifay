@@ -48,9 +48,15 @@ data class AudiusTrack(
     val play_count: Long = 0,
     val favorite_count: Long = 0,
     val release_date: String? = null,
+    val is_streamable: Boolean = true,
+    val is_delete: Boolean = false,
 ) {
     val coverUrl: String?
         get() = artworkUrl(artwork)
+
+    /** Audius still lists a few deleted or withdrawn uploads; don't queue those. */
+    val isPlayable: Boolean
+        get() = id.isNotBlank() && is_streamable && !is_delete
 
     val durationLabel: String
         get() {

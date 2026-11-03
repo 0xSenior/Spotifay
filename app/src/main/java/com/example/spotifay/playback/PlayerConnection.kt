@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executor
 
+/** Give up after this many consecutive bad tracks so we never spin forever. */
+private const val MAX_SKIPS = 5
+
+/** How long a "skipping that track" note stays on screen. */
+private const val ERROR_VISIBLE_MS = 4_000L
+
 data class NowPlayingState(
     val title: String = "",
     val artist: String = "",
@@ -72,6 +78,11 @@ class PlayerConnection(context: Context) {
     private var lastRememberedId: String? = null
     private var pendingPlay: (() -> Unit)? = null
 
+    /** Audius occasionally serves a dead stream; skip it instead of stalling. */
+    private var consecutiveSkips = 0
+    private var transientError: String? = null
+    private var transientErrorAt = 0L
+
     init {
         connect()
     }
@@ -90,7 +101,10 @@ class PlayerConnection(context: Context) {
 
                             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) = publish()
 
-                            override fun onIsPlayingChanged(isPlaying: Boolean) = publish()
+                            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                                if (isPlaying) consecutiveSkips = 0
+                                publish()
+                            }
 
                             override fun onPlaybackStateChanged(playbackState: Int) = publish()
 
@@ -100,7 +114,32 @@ class PlayerConnection(context: Context) {
                             }
 
                             override fun onPlayerError(error: PlaybackException) {
-                                _state.value = _state.value.copy(error = error.message ?: "Playback failed")
+                                val failedTitle = mediaController.mediaMetadata.title?.toString().orEmpty()
+                                val message = when (error.errorCode) {
+                                    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                                    PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+                                    -> "This track isn't available right now"
+
+                                    else -> "Playback failed"
+                                }
+                                transientError = if (failedTitle.isBlank()) {
+                                    message
+                                } else {
+                                    "$message — skipping \"$failedTitle\""
+                                }
+                                transientErrorAt = System.currentTimeMillis()
+
+                                // Audius has a handful of broken uploads. Keep the
+                                // queue moving instead of parking on a dead track.
+                                if (mediaController.hasNextMediaItem() && consecutiveSkips < MAX_SKIPS) {
+                                    consecutiveSkips++
+                                    mediaController.seekToNextMediaItem()
+                                    mediaController.prepare()
+                                    mediaController.play()
+                                } else {
+                                    consecutiveSkips = 0
+                                }
+                                publish()
                             }
                         })
                         publish()
@@ -136,6 +175,11 @@ class PlayerConnection(context: Context) {
         val metadata = mediaController.mediaMetadata
         val duration = mediaController.duration
 
+        val error = transientError?.takeIf {
+            System.currentTimeMillis() - transientErrorAt < ERROR_VISIBLE_MS
+        }
+        if (error == null) transientError = null
+
         _state.value = NowPlayingState(
             title = metadata.title?.toString().orEmpty(),
             artist = metadata.artist?.toString().orEmpty(),
@@ -147,6 +191,7 @@ class PlayerConnection(context: Context) {
             durationMs = if (duration > 0) duration else 0L,
             hasNext = mediaController.hasNextMediaItem(),
             hasPrevious = mediaController.hasPreviousMediaItem(),
+            error = error,
         )
     }
 
@@ -199,7 +244,12 @@ class PlayerConnection(context: Context) {
 
     fun togglePlayPause() {
         val mediaController = controller ?: return
-        if (mediaController.isPlaying) mediaController.pause() else mediaController.play()
+        if (mediaController.isPlaying) {
+            mediaController.pause()
+        } else {
+            if (mediaController.playbackState == Player.STATE_IDLE) mediaController.prepare()
+            mediaController.play()
+        }
     }
 
     fun next() = controller?.seekToNextMediaItem()
