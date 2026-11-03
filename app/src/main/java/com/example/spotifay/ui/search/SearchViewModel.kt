@@ -3,9 +3,8 @@ package com.example.spotifay.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.spotifay.Graph
-import com.example.spotifay.data.remote.Album
-import com.example.spotifay.data.remote.Artist
-import com.example.spotifay.data.remote.Track
+import com.example.spotifay.data.audius.AudiusPlaylist
+import com.example.spotifay.data.audius.AudiusTrack
 import com.example.spotifay.ui.home.readable
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,14 +16,12 @@ import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
-    data object NeedsAuth : SearchUiState
     data object Loading : SearchUiState
     data class Results(
-        val tracks: List<Track> = emptyList(),
-        val artists: List<Artist> = emptyList(),
-        val albums: List<Album> = emptyList(),
+        val tracks: List<AudiusTrack> = emptyList(),
+        val playlists: List<AudiusPlaylist> = emptyList(),
     ) : SearchUiState {
-        val isEmpty: Boolean get() = tracks.isEmpty() && artists.isEmpty() && albums.isEmpty()
+        val isEmpty: Boolean get() = tracks.isEmpty() && playlists.isEmpty()
     }
 
     data class Failed(val message: String) : SearchUiState
@@ -34,34 +31,29 @@ sealed interface SearchUiState {
 class SearchViewModel : ViewModel() {
 
     private val query = MutableStateFlow("")
+
     private val _state = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val state = _state.asStateFlow()
-
-    val currentQuery: String get() = query.value
 
     init {
         viewModelScope.launch {
             query
                 .debounce(350)
                 .distinctUntilChanged()
-                .collectLatest { text ->
-                    val trimmed = text.trim()
-                    when {
-                        trimmed.isEmpty() -> _state.value = SearchUiState.Idle
-                        !Graph.auth.isSignedIn -> _state.value = SearchUiState.NeedsAuth
-                        else -> {
-                            _state.value = SearchUiState.Loading
-                            runCatching { Graph.repository.search(trimmed) }
-                                .onSuccess { response ->
-                                    _state.value = SearchUiState.Results(
-                                        tracks = response.tracks?.items.orEmpty(),
-                                        artists = response.artists?.items.orEmpty(),
-                                        albums = response.albums?.items.orEmpty(),
-                                    )
-                                }
-                                .onFailure { _state.value = SearchUiState.Failed(it.readable()) }
-                        }
+                .collectLatest { raw ->
+                    val text = raw.trim()
+                    if (text.isEmpty()) {
+                        _state.value = SearchUiState.Idle
+                        return@collectLatest
                     }
+                    _state.value = SearchUiState.Loading
+                    runCatching {
+                        val tracks = Graph.repository.searchTracks(text)
+                        val playlists = runCatching { Graph.repository.searchPlaylists(text) }.getOrDefault(emptyList())
+                        SearchUiState.Results(tracks = tracks, playlists = playlists)
+                    }
+                        .onSuccess { _state.value = it }
+                        .onFailure { _state.value = SearchUiState.Failed(it.readable()) }
                 }
         }
     }
