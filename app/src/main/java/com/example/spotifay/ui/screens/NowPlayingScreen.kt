@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -224,10 +225,10 @@ private fun StatusLine(state: NowPlayingState) {
         }
 
         state.isBuffering -> {
-            Spacer(Modifier.size(8.dp))
-            Text(
-                "Buffering...",
-                style = MaterialTheme.typography.labelSmall,
+            Spacer(Modifier.size(10.dp))
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

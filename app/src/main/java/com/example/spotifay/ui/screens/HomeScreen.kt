@@ -69,7 +69,7 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SpotifayWordmark(Modifier.weight(1f))
-                IconButton(onClick = { viewModel.load() }) {
+                IconButton(onClick = { viewModel.load(force = true) }) {
                     Icon(
                         Icons.Rounded.Refresh,
                         contentDescription = "Reload",
@@ -120,7 +120,7 @@ fun HomeScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { viewModel.load() },
+                        onClick = { viewModel.load(force = true) },
                         shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,

@@ -52,7 +52,11 @@ data class AudiusTrack(
     val is_delete: Boolean = false,
 ) {
     val coverUrl: String?
-        get() = artworkUrl(artwork)
+        get() = artworkUrl(artwork, ArtworkSize.Large)
+
+    /** Small variant for list rows: ~4x less to download and decode than 1000x1000. */
+    val thumbUrl: String?
+        get() = artworkUrl(artwork, ArtworkSize.Small) ?: coverUrl
 
     /** Audius still lists a few deleted or withdrawn uploads; don't queue those. */
     val isPlayable: Boolean
@@ -87,15 +91,29 @@ data class AudiusPlaylist(
     val user: AudiusUser = AudiusUser(),
 ) {
     val coverUrl: String?
-        get() = artworkUrl(artwork)
+        get() = artworkUrl(artwork, ArtworkSize.Large)
+
+    val thumbUrl: String?
+        get() = artworkUrl(artwork, ArtworkSize.Small) ?: coverUrl
+}
+
+private enum class ArtworkSize {
+    /** List thumbnails and the mini player. */
+    Small,
+
+    /** Full-screen now playing artwork and the media notification. */
+    Large,
 }
 
 /**
  * Audius artwork is keyed by size ("150x150", "480x480", ...) and also carries a
- * "mirrors" array. Pick the biggest plain URL we can find.
+ * "mirrors" array. Pick the best plain URL we can find for the target size.
  */
-private fun artworkUrl(artwork: Map<String, JsonElement>): String? {
-    val preferred = listOf("1000x1000", "480x480", "150x150")
+private fun artworkUrl(artwork: Map<String, JsonElement>, size: ArtworkSize): String? {
+    val preferred = when (size) {
+        ArtworkSize.Small -> listOf("480x480", "150x150", "1000x1000")
+        ArtworkSize.Large -> listOf("1000x1000", "480x480", "150x150")
+    }
     preferred.forEach { key ->
         val url = (artwork[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
         if (!url.isNullOrBlank()) return url

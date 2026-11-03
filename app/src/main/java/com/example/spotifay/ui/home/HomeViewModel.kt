@@ -32,12 +32,17 @@ class HomeViewModel : ViewModel() {
         load()
     }
 
-    fun load() {
+    /**
+     * [force] skips the caches; the plain load paints from cache instantly while
+     * fresh data (if any) is already being warmed by the repository.
+     */
+    fun load(force: Boolean = false) {
         viewModelScope.launch {
-            _state.value = HomeUiState.Loading
+            if (_state.value !is HomeUiState.Ready) _state.value = HomeUiState.Loading
             runCatching {
-                val tracks = repository.trendingTracks()
-                val playlists = runCatching { repository.trendingPlaylists() }.getOrDefault(emptyList())
+                val tracks = repository.trendingTracks(force = force)
+                val playlists = runCatching { repository.trendingPlaylists(force = force) }
+                    .getOrDefault(emptyList())
                 HomeUiState.Ready(tracks = tracks, playlists = playlists)
             }
                 .onSuccess { _state.value = it }
