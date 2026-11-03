@@ -1,6 +1,7 @@
 package com.example.spotifay.playback
 
 import android.content.Context
+import com.example.spotifay.data.audius.AudiusTrack
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -18,9 +19,10 @@ object PlayerHub {
     val state: StateFlow<NowPlayingState>
         get() = requireNotNull(connection) { "PlayerHub.init() was never called" }.state
 
-    fun play(tracks: List<com.example.spotifay.data.audius.AudiusTrack>, startIndex: Int) {
-        connection?.play(tracks, startIndex)
-    }
+    val recent: StateFlow<List<AudiusTrack>>
+        get() = requireNotNull(connection) { "PlayerHub.init() was never called" }.recent
+
+    fun play(tracks: List<AudiusTrack>, startIndex: Int) = connection?.play(tracks, startIndex)
 
     fun togglePlayPause() = connection?.togglePlayPause()
 

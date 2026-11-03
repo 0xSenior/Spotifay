@@ -1,6 +1,8 @@
 package com.example.spotifay.data.audius
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Audius is an open music network: no accounts, no API keys, no OAuth.
@@ -39,7 +41,7 @@ data class AudiusTrack(
     val id: String = "",
     val title: String = "",
     val user: AudiusUser = AudiusUser(),
-    val artwork: Map<String, String> = emptyMap(),
+    val artwork: Map<String, JsonElement> = emptyMap(),
     val duration: Int = 0,
     val genre: String? = null,
     val mood: String? = null,
@@ -48,7 +50,7 @@ data class AudiusTrack(
     val release_date: String? = null,
 ) {
     val coverUrl: String?
-        get() = artwork["480x480"] ?: artwork["150x150"] ?: artwork["1000x1000"] ?: artwork.values.firstOrNull()
+        get() = artworkUrl(artwork)
 
     val durationLabel: String
         get() {
@@ -73,13 +75,30 @@ data class AudiusPlaylist(
     val id: String = "",
     val playlist_name: String = "",
     val description: String? = null,
-    val artwork: Map<String, String> = emptyMap(),
+    val artwork: Map<String, JsonElement> = emptyMap(),
     val track_count: Int = 0,
     val total_play_count: Long = 0,
     val user: AudiusUser = AudiusUser(),
 ) {
     val coverUrl: String?
-        get() = artwork["480x480"] ?: artwork["150x150"] ?: artwork.values.firstOrNull()
+        get() = artworkUrl(artwork)
+}
+
+/**
+ * Audius artwork is keyed by size ("150x150", "480x480", ...) and also carries a
+ * "mirrors" array. Pick the biggest plain URL we can find.
+ */
+private fun artworkUrl(artwork: Map<String, JsonElement>): String? {
+    val preferred = listOf("1000x1000", "480x480", "150x150")
+    preferred.forEach { key ->
+        val url = (artwork[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (!url.isNullOrBlank()) return url
+    }
+    return artwork.values
+        .filterIsInstance<JsonPrimitive>()
+        .firstOrNull { it.isString }
+        ?.content
+        ?.takeIf { it.isNotBlank() }
 }
 
 @Serializable

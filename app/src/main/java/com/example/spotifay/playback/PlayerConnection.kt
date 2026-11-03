@@ -3,7 +3,6 @@ package com.example.spotifay.playback
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
-import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -65,6 +64,14 @@ class PlayerConnection(context: Context) {
     private val _state = MutableStateFlow(NowPlayingState())
     val state: StateFlow<NowPlayingState> = _state.asStateFlow()
 
+    /** Session history, newest first. Lives as long as the process does. */
+    private val _recent = MutableStateFlow<List<AudiusTrack>>(emptyList())
+    val recent: StateFlow<List<AudiusTrack>> = _recent.asStateFlow()
+
+    private val queuedTracks = mutableMapOf<String, AudiusTrack>()
+    private var lastRememberedId: String? = null
+    private var pendingPlay: (() -> Unit)? = null
+
     init {
         connect()
     }
@@ -80,16 +87,26 @@ class PlayerConnection(context: Context) {
                         controller = mediaController
                         mediaController.addListener(object : Player.Listener {
                             override fun onEvents(player: Player, events: Player.Events) = publish()
+
                             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) = publish()
+
                             override fun onIsPlayingChanged(isPlaying: Boolean) = publish()
+
                             override fun onPlaybackStateChanged(playbackState: Int) = publish()
-                            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = publish()
+
+                            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                                rememberCurrent()
+                                publish()
+                            }
+
                             override fun onPlayerError(error: PlaybackException) {
                                 _state.value = _state.value.copy(error = error.message ?: "Playback failed")
                             }
                         })
                         publish()
                         startTicker()
+                        pendingPlay?.invoke()
+                        pendingPlay = null
                     }
                     .onFailure {
                         _state.value = _state.value.copy(error = "Playback service unavailable")
@@ -133,10 +150,27 @@ class PlayerConnection(context: Context) {
         )
     }
 
+    private fun remember(track: AudiusTrack) {
+        _recent.value = (listOf(track) + _recent.value.filterNot { it.id == track.id }).take(30)
+        lastRememberedId = track.id
+    }
+
+    private fun rememberCurrent() {
+        val mediaController = controller ?: return
+        val id = mediaController.currentMediaItem?.mediaId ?: return
+        if (id == lastRememberedId) return
+        queuedTracks[id]?.let(::remember)
+    }
+
     /** Replaces the queue with [tracks] and starts at [startIndex]. */
     fun play(tracks: List<AudiusTrack>, startIndex: Int) {
-        val mediaController = controller ?: return
         if (tracks.isEmpty()) return
+        val mediaController = controller
+        if (mediaController == null) {
+            // Still binding to the service; run this the moment it is ready.
+            pendingPlay = { play(tracks, startIndex) }
+            return
+        }
 
         val items = tracks.map { track ->
             MediaItem.Builder()
@@ -152,10 +186,14 @@ class PlayerConnection(context: Context) {
                 .build()
         }
 
+        queuedTracks.clear()
+        tracks.forEach { queuedTracks[it.id] = it }
+
         val index = startIndex.coerceIn(0, items.lastIndex)
         mediaController.setMediaItems(items, index, 0L)
-        runCatching { mediaController.prepare() }
+        mediaController.prepare()
         mediaController.play()
+        remember(tracks[index])
         publish()
     }
 
@@ -171,15 +209,5 @@ class PlayerConnection(context: Context) {
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
         _state.value = _state.value.copy(positionMs = positionMs)
-    }
-
-    fun start() {
-        val mediaController = controller
-        if (mediaController != null && mediaController.mediaItemCount > 0) {
-            ContextCompat.startForegroundService(
-                appContext,
-                android.content.Intent(appContext, PlaybackService::class.java),
-            )
-        }
     }
 }

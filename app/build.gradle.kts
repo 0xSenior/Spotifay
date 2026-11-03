@@ -19,8 +19,6 @@ android {
         versionName = "0.1.0"
 
         vectorDrawables { useSupportLibrary = true }
-
-        manifestPlaceholders["appAuthRedirectScheme"] = "spotifay"
     }
 
     buildTypes {
@@ -69,7 +67,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.browser)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -93,7 +90,4 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
-
-    implementation(libs.appauth)
-    implementation(libs.androidx.datastore.preferences)
 }
